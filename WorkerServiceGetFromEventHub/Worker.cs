@@ -2,7 +2,10 @@ using Azure.Messaging.EventHubs;
 using Azure.Messaging.EventHubs.Consumer;
 using Azure.Messaging.EventHubs.Processor;
 using Azure.Storage.Blobs;
+using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
+using WorkerServiceGetFromEventHub.Models;
 
 namespace WorkerServiceGetFromEventHub;
 
@@ -92,11 +95,19 @@ public class Worker : BackgroundService
             {
                 string msgSource;
                 string body = Encoding.UTF8.GetString(receivedEvent.Data.Body.ToArray());
-                //if (receivedEvent.Data.SystemProperties.ContainsKey("iothub-message-source"))
-                //{
-                //    msgSource = receivedEvent.Data.SystemProperties["iothub-message-source"].ToString();
-                //    Console.WriteLine($"{partitionId} {msgSource} {body}");
-                //}
+                //var jsonBody = Encoding.UTF8.GetString(receivedEvent.Data.Body);
+                if (receivedEvent.Data.SystemProperties.ContainsKey("iothub-message-source"))
+                {
+                    msgSource = receivedEvent.Data.SystemProperties["iothub-message-source"].ToString();
+                    Console.WriteLine($"{partitionId} {msgSource} {body}");
+
+                    // json deserialize
+                    OpenDoorRequest message = JsonSerializer.Deserialize<OpenDoorRequest>(body);
+
+                    //Console.WriteLine("door ID: " + message.DoorID);
+                    //Console.WriteLine("gateway ID: " + message.GatewayID);
+                    //Console.WriteLine("device gen code: " + message.DeviceGeneratedCode);
+                }
             }
         }
     }
