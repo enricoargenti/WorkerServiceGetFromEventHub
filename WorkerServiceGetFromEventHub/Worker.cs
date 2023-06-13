@@ -2,6 +2,7 @@ using Azure.Messaging.EventHubs;
 using Azure.Messaging.EventHubs.Consumer;
 using Azure.Messaging.EventHubs.Processor;
 using Azure.Storage.Blobs;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -15,6 +16,9 @@ public class Worker : BackgroundService
     private readonly IConfiguration _configuration;
     private EventProcessorClient _processor;
     private EventHubConsumerClient _eventHubConsumerClient;
+
+    // Client initialization
+    static HttpClient client = new HttpClient();
     public Worker(ILogger<Worker> logger, IConfiguration configuration)
     {
         _logger = logger;
@@ -28,24 +32,8 @@ public class Worker : BackgroundService
         //string eventHubName = "picloud";
         string connStringstorageAccount = _configuration.GetConnectionString("StorageAccount");
 
-
-        //var blobContainerName = "events";
-        //// Create a blob container client that the event processor will use
-        //BlobContainerClient storageClient = new BlobContainerClient(connStringstorageAccount, blobContainerName);
-        //storageClient.CreateIfNotExists();
-        //// Create an event processor client to process events in the event hub
-        //// TODO: Replace the <EVENT_HUBS_NAMESPACE> and <HUB_NAME> placeholder values
-        //_processor = new EventProcessorClient(
-        //    storageClient,
-        //    EventHubConsumerClient.DefaultConsumerGroupName,
-        //    connStringEventHub);
-
-        //// Register handlers for processing events and handling errors
-        //_processor.ProcessEventAsync += ProcessEventHandler;
-        //_processor.ProcessErrorAsync += ProcessErrorHandler;
-
-        //// Start the processing
-        //await _processor.StartProcessingAsync();
+        // Start the client that calls the APIs
+        RunAsync();
 
 
 
@@ -68,14 +56,11 @@ public class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-
         //while (!stoppingToken.IsCancellationRequested)
         //{
 
         //    await Task.Delay(30000, stoppingToken);
         //}
-
-
     }
     private async Task ProcessEventHandler(ProcessEventArgs eventArgs)
     {
@@ -104,6 +89,21 @@ public class Worker : BackgroundService
                     // json deserialize
                     OpenDoorRequest message = JsonSerializer.Deserialize<OpenDoorRequest>(body);
 
+                    Console.WriteLine("DooId -> " + message.DoorId);
+                    Console.WriteLine("GatewayId -> " + message.GatewayId);
+                    Console.WriteLine("DeviceGeneratedCode -> " + message.DeviceGeneratedCode);
+
+                    // Let'ws try to write it into he database calling our APIs
+                    try
+                    {
+                        Uri location = await InsertOpenDoorRequestAsync(message);
+                        Console.WriteLine($"OpenDoorRequest created at {location}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"An error occurred: {ex.Message}");
+                    }
+
                     //Console.WriteLine("door ID: " + message.DoorID);
                     //Console.WriteLine("gateway ID: " + message.GatewayID);
                     //Console.WriteLine("device gen code: " + message.DeviceGeneratedCode);
@@ -118,5 +118,33 @@ public class Worker : BackgroundService
         Console.WriteLine($"\tPartition '{eventArgs.PartitionId}': an unhandled exception was encountered. This was not expected to happen.");
         Console.WriteLine(eventArgs.Exception.Message);
         return Task.CompletedTask;
+    }
+
+    // Http client initialization
+    static async Task RunAsync()
+    {
+        client.BaseAddress = new Uri("https://localhost:7295/");
+        client.DefaultRequestHeaders.Accept.Clear();
+        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+    }
+
+    static async Task<OpenDoorRequest> GetOpenDoorRequestAsync(string path)
+    {
+        OpenDoorRequest openDoorRequest = null;
+        HttpResponseMessage response = await client.GetAsync(path);
+        if (response.IsSuccessStatusCode)
+        {
+            openDoorRequest = await response.Content.ReadAsAsync<OpenDoorRequest>();
+        }
+        return openDoorRequest;
+    }
+
+    static async Task<Uri> InsertOpenDoorRequestAsync(OpenDoorRequest openDoorRequest)
+    {
+        HttpResponseMessage response = await client.PostAsJsonAsync("api/DoorOpenRequest", openDoorRequest);
+        response.EnsureSuccessStatusCode();
+
+        // return URI of the created resource.
+        return response.Headers.Location;
     }
 }

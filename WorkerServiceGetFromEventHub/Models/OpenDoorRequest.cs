@@ -8,10 +8,12 @@ namespace WorkerServiceGetFromEventHub.Models;
 
 internal class OpenDoorRequest
 {
-    public string DoorID { get; set; }
-    public string GatewayID { get; set; }
-    public string DeviceGeneratedCode { get; set; }
-    public DateTime Time { get; set; }
+    public int? Id { get; set; }
+    public int DoorId { get; set; }
+    public int GatewayId { get; set; }
+    public int DeviceGeneratedCode { get; set; }
+    public int CloudGeneratedCode { get; set; }
+    public DateTime AccessRequestTime { get; set; }
 
     public OpenDoorRequest()
     {
