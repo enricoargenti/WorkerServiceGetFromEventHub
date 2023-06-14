@@ -90,8 +90,20 @@ public class Worker : BackgroundService
                     OpenDoorRequest message = JsonSerializer.Deserialize<OpenDoorRequest>(body);
 
                     Console.WriteLine("DooId -> " + message.DoorId);
-                    Console.WriteLine("GatewayId -> " + message.GatewayId);
+                    Console.WriteLine("Gateway (DeviceId) -> " + message.DeviceId);
                     Console.WriteLine("DeviceGeneratedCode -> " + message.DeviceGeneratedCode);
+
+                    // I change the random generated code created from cloud
+                    // Random code generation
+                    Random random = new Random();
+                    string randomGeneratedCode = "";
+                    for (int i = 0; i < 5; i++)
+                    {
+                        // Generate a random number between 1 and 9
+                        randomGeneratedCode += random.Next(1, 10).ToString();
+                    }
+                    message.CloudGeneratedCode = Convert.ToInt32(randomGeneratedCode);
+
 
                     // Let'ws try to write it into he database calling our APIs
                     try
