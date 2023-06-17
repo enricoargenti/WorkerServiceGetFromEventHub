@@ -27,15 +27,11 @@ public class Worker : BackgroundService
 
     public override async Task StartAsync(CancellationToken cancellationToken)
     {
-        //var connectionString = _configuration.GetConnectionString("EventHub");
         string connStringEventHub = _configuration.GetConnectionString("EventHub");
-        //string eventHubName = "picloud";
         string connStringstorageAccount = _configuration.GetConnectionString("StorageAccount");
 
         // Start the client that calls the APIs
         RunAsync();
-
-
 
         _eventHubConsumerClient = new EventHubConsumerClient(EventHubConsumerClient.DefaultConsumerGroupName,
             connStringEventHub.Replace("sb://", "amqps://"));
@@ -87,7 +83,9 @@ public class Worker : BackgroundService
                     Console.WriteLine($"{partitionId} {msgSource} {body}");
 
                     // json deserialize
-                    OpenDoorRequest message = JsonSerializer.Deserialize<OpenDoorRequest>(body);
+                    var message = JsonSerializer.Deserialize<OpenDoorRequest>(body);
+
+                    // if (messaggio deserializzato ha il codice 
 
                     Console.WriteLine("DooId -> " + message.DoorId);
                     Console.WriteLine("Gateway (DeviceId) -> " + message.DeviceId);
@@ -102,10 +100,10 @@ public class Worker : BackgroundService
                         // Generate a random number between 1 and 9
                         randomGeneratedCode += random.Next(1, 10).ToString();
                     }
-                    message.CloudGeneratedCode = Convert.ToInt32(randomGeneratedCode);
+                    message.CloudGeneratedCode = randomGeneratedCode;
 
 
-                    // Let'ws try to write it into he database calling our APIs
+                    // Let'ws try to write it into the database calling our APIs
                     try
                     {
                         Uri location = await InsertOpenDoorRequestAsync(message);
@@ -116,9 +114,6 @@ public class Worker : BackgroundService
                         Console.WriteLine($"An error occurred: {ex.Message}");
                     }
 
-                    //Console.WriteLine("door ID: " + message.DoorID);
-                    //Console.WriteLine("gateway ID: " + message.GatewayID);
-                    //Console.WriteLine("device gen code: " + message.DeviceGeneratedCode);
                 }
             }
         }
@@ -154,8 +149,14 @@ public class Worker : BackgroundService
     static async Task<Uri> InsertOpenDoorRequestAsync(OpenDoorRequest openDoorRequest)
     {
         HttpResponseMessage response = await client.PostAsJsonAsync("api/DoorOpenRequest", openDoorRequest);
-        response.EnsureSuccessStatusCode();
-
+        try
+        {
+            response.EnsureSuccessStatusCode();
+        }
+        catch (HttpRequestException ex) 
+        { 
+            Console.WriteLine(ex.Message);
+        }
         // return URI of the created resource.
         return response.Headers.Location;
     }
