@@ -19,19 +19,23 @@ public class Worker : BackgroundService
 
     // Client initialization
     static HttpClient client = new HttpClient();
+
+    private OpenDoorRequest _openDoorRequest;
+
     public Worker(ILogger<Worker> logger, IConfiguration configuration)
     {
         _logger = logger;
         _configuration = configuration;
+
+        client.BaseAddress = new Uri("https://localhost:7295/");
+        client.DefaultRequestHeaders.Accept.Clear();
+        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
 
     public override async Task StartAsync(CancellationToken cancellationToken)
     {
         string connStringEventHub = _configuration.GetConnectionString("EventHub");
         string connStringstorageAccount = _configuration.GetConnectionString("StorageAccount");
-
-        // Start the client that calls the APIs
-        RunAsync();
 
         _eventHubConsumerClient = new EventHubConsumerClient(EventHubConsumerClient.DefaultConsumerGroupName,
             connStringEventHub.Replace("sb://", "amqps://"));
@@ -58,14 +62,7 @@ public class Worker : BackgroundService
         //    await Task.Delay(30000, stoppingToken);
         //}
     }
-    private async Task ProcessEventHandler(ProcessEventArgs eventArgs)
-    {
-        // Write the body of the event to the console window
-        Console.WriteLine("\tReceived event: {0}", Encoding.UTF8.GetString(eventArgs.Data.Body.ToArray()));
 
-        // Update checkpoint in the blob storage so that the app receives only new events the next time it's run
-        await eventArgs.UpdateCheckpointAsync(eventArgs.CancellationToken);
-    }
 
     async Task ReceiveMessagesFromDeviceAsync(string partitionId)
     {
@@ -80,71 +77,103 @@ public class Worker : BackgroundService
                 if (receivedEvent.Data.SystemProperties.ContainsKey("iothub-message-source"))
                 {
                     msgSource = receivedEvent.Data.SystemProperties["iothub-message-source"].ToString();
-                    Console.WriteLine($"{partitionId} {msgSource} {body}");
+                    Console.WriteLine($"Message: {body}");
 
                     // json deserialize
                     var message = JsonSerializer.Deserialize<OpenDoorRequest>(body);
 
-                    // if (messaggio deserializzato ha il codice 
-
                     Console.WriteLine("DooId -> " + message.DoorId);
                     Console.WriteLine("Gateway (DeviceId) -> " + message.DeviceId);
                     Console.WriteLine("DeviceGeneratedCode -> " + message.DeviceGeneratedCode);
+                    Console.WriteLine("CodeInsertedOnDoorByUser -> " + message.CodeInsertedOnDoorByUser);
 
-                    // I change the random generated code created from cloud
-                    // Random code generation
-                    Random random = new Random();
-                    string randomGeneratedCode = "";
-                    for (int i = 0; i < 5; i++)
+                    // Control if the message is a new openRequest
+                    if (message.TypeOfMessage == "newOpenDoorRequest")
                     {
-                        // Generate a random number between 1 and 9
-                        randomGeneratedCode += random.Next(1, 10).ToString();
-                    }
-                    message.CloudGeneratedCode = randomGeneratedCode;
+                        // I change the random generated code created from cloud
+                        // Random code generation
+                        Random random = new Random();
+                        string randomGeneratedCode = "";
+                        for (int i = 0; i < 5; i++)
+                        {
+                            // Generate a random number between 1 and 9
+                            randomGeneratedCode += random.Next(1, 10).ToString();
+                        }
+                        message.CloudGeneratedCode = randomGeneratedCode;
 
 
-                    // Let'ws try to write it into the database calling our APIs
-                    try
-                    {
-                        Uri location = await InsertOpenDoorRequestAsync(message);
-                        Console.WriteLine($"OpenDoorRequest created at {location}");
+                        // Let'ws try to write it into the database calling our APIs
+                        try
+                        {
+                            Uri location = await InsertOpenDoorRequestAsync(message);
+                            Console.WriteLine($"OpenDoorRequest added to the database");
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"An error occurred: {ex.Message}");
+                        }
                     }
-                    catch (Exception ex)
+                    else if (message.TypeOfMessage == "secondMessageFromDoor")
                     {
-                        Console.WriteLine($"An error occurred: {ex.Message}");
+                        // This code will be the key to access the correct row inside the db
+                        string deviceGeneratedCode = message.DeviceGeneratedCode;
+                        //
+                        Console.WriteLine("Second message: to do");
+                        await GetOpenDoorRequest(deviceGeneratedCode);
+
+                        // Now that we have the openDoorRequest, we can make a PUT to alter it
+                        _openDoorRequest.CodeInsertedOnDoorByUser = message.CodeInsertedOnDoorByUser;
+
+                        await AddCodeInsertedOnDoorByUser();
+
                     }
+
+
 
                 }
             }
         }
     }
 
-    private Task ProcessErrorHandler(ProcessErrorEventArgs eventArgs)
-    {
-        // Write details about the error to the console window
-        Console.WriteLine($"\tPartition '{eventArgs.PartitionId}': an unhandled exception was encountered. This was not expected to happen.");
-        Console.WriteLine(eventArgs.Exception.Message);
-        return Task.CompletedTask;
-    }
 
-    // Http client initialization
-    static async Task RunAsync()
+    public async Task GetOpenDoorRequest(string deviceGeneratedCode)
     {
-        client.BaseAddress = new Uri("https://localhost:7295/");
-        client.DefaultRequestHeaders.Accept.Clear();
-        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-    }
-
-    static async Task<OpenDoorRequest> GetOpenDoorRequestAsync(string path)
-    {
-        OpenDoorRequest openDoorRequest = null;
-        HttpResponseMessage response = await client.GetAsync(path);
-        if (response.IsSuccessStatusCode)
+        try
         {
-            openDoorRequest = await response.Content.ReadAsAsync<OpenDoorRequest>();
+            string path = $"api/DoorOpenRequest/deviceGeneratedCode/{deviceGeneratedCode}";
+
+            _openDoorRequest = await GetOpenDoorRequestAsync(path);
+
+            if (_openDoorRequest != null)
+            {
+                Console.WriteLine($"OpenDoorRequest found: {_openDoorRequest.Id}");
+            }
+            else
+            {
+                Console.WriteLine("OpenDoorRequest not found.");
+            }
         }
-        return openDoorRequest;
+        catch (Exception ex)
+        {
+            Console.WriteLine($"An error occurred: {ex.Message}");
+        }
     }
+
+    public async Task AddCodeInsertedOnDoorByUser()
+    {
+        try
+        {
+            string path = $"api/DoorOpenRequest/{_openDoorRequest.Id}";
+
+            await UpdateOpenDoorRequestAsync(path, _openDoorRequest);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"An error occurred: {ex.Message}");
+        }
+    }
+
+
 
     static async Task<Uri> InsertOpenDoorRequestAsync(OpenDoorRequest openDoorRequest)
     {
@@ -160,4 +189,37 @@ public class Worker : BackgroundService
         // return URI of the created resource.
         return response.Headers.Location;
     }
+
+    static async Task<OpenDoorRequest> GetOpenDoorRequestAsync(string path)
+    {
+        OpenDoorRequest openDoorRequest = null;
+        HttpResponseMessage response = await client.GetAsync(path);
+        if (response.IsSuccessStatusCode)
+        {
+            openDoorRequest = await response.Content.ReadAsAsync<OpenDoorRequest>();
+        }
+        return openDoorRequest;
+    }
+
+    static async Task UpdateOpenDoorRequestAsync(string path, OpenDoorRequest content)
+    {
+        HttpResponseMessage response = await client.PutAsJsonAsync(path, content);
+
+        Console.WriteLine();
+        Console.WriteLine("content: " + JsonSerializer.Serialize(content));
+        Console.WriteLine("path: " + path);
+
+        Console.WriteLine("Response della PUT: " + response.StatusCode);
+        Console.WriteLine(response.ToString());
+        Console.WriteLine(response.RequestMessage);
+        if (response.IsSuccessStatusCode)
+        {
+            Console.WriteLine("OpenDoorRequest successfully updated");
+        }
+        else
+        {
+            Console.WriteLine("Failed OpenDoorRequest update");
+        }
+    }
+
 }
