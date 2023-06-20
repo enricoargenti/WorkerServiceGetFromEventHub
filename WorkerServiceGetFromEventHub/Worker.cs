@@ -22,6 +22,8 @@ public class Worker : BackgroundService
 
     private OpenDoorRequest _openDoorRequest;
 
+    private Timer _timer;
+
     public Worker(ILogger<Worker> logger, IConfiguration configuration)
     {
         _logger = logger;
@@ -46,10 +48,15 @@ public class Worker : BackgroundService
         {
             tasks.Add(ReceiveMessagesFromDeviceAsync(partition));
         }
+        
+        // Calls the function every three minutes to delete older requests
+        TimeSpan interval = TimeSpan.FromSeconds(10);
+        _timer = new Timer(DeleteExpiredOpenDoorRequestsAsync, null, TimeSpan.Zero, interval);
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
+        _timer?.Dispose();
         await _processor.StopProcessingAsync(cancellationToken);
         await base.StopAsync(cancellationToken);
     }
@@ -73,10 +80,10 @@ public class Worker : BackgroundService
             {
                 string msgSource;
                 string body = Encoding.UTF8.GetString(receivedEvent.Data.Body.ToArray());
-                //var jsonBody = Encoding.UTF8.GetString(receivedEvent.Data.Body);
+
                 if (receivedEvent.Data.SystemProperties.ContainsKey("iothub-message-source"))
                 {
-                    msgSource = receivedEvent.Data.SystemProperties["iothub-message-source"].ToString();
+                    //msgSource = receivedEvent.Data.SystemProperties["iothub-message-source"].ToString();
                     Console.WriteLine($"Message: {body}");
 
                     // json deserialize
@@ -173,6 +180,26 @@ public class Worker : BackgroundService
         }
     }
 
+    public async Task DeleteCodes(int minutes)
+    {
+        try
+        {
+            string path = $"api/DoorOpenRequest/minutes/{minutes}";
+            await DeleteOpenDoorRequestsAsync(path);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"An error occurred: {ex.Message}");
+        }
+    }
+
+    private async void DeleteExpiredOpenDoorRequestsAsync(object state)
+    {
+        await DeleteCodes(3);
+    }
+
+
+
 
 
     static async Task<Uri> InsertOpenDoorRequestAsync(OpenDoorRequest openDoorRequest)
@@ -219,6 +246,19 @@ public class Worker : BackgroundService
         else
         {
             Console.WriteLine("Failed OpenDoorRequest update");
+        }
+    }
+
+    static async Task DeleteOpenDoorRequestsAsync(string path)
+    {
+        HttpResponseMessage response = await client.DeleteAsync(path);
+        if (response.IsSuccessStatusCode)
+        {
+            Console.WriteLine("Expired rows successfully deleted");
+        }
+        else
+        {
+            Console.WriteLine("Error: the delete action could not be processed for any reason");
         }
     }
 
