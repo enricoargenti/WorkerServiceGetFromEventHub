@@ -22,7 +22,7 @@ public class Worker : BackgroundService
 
     private OpenDoorRequest _openDoorRequest;
 
-    private Timer _timer;
+    //private Timer _timer;
 
     public Worker(ILogger<Worker> logger, IConfiguration configuration)
     {
@@ -48,15 +48,15 @@ public class Worker : BackgroundService
         {
             tasks.Add(ReceiveMessagesFromDeviceAsync(partition));
         }
-        
+
         // Calls the function every three minutes to delete older requests
-        TimeSpan interval = TimeSpan.FromSeconds(10);
-        _timer = new Timer(DeleteExpiredOpenDoorRequestsAsync, null, TimeSpan.Zero, interval);
+        TimeSpan interval = TimeSpan.FromMinutes(3);   // FromSeconds(10);
+        //_timer = new Timer(DeleteExpiredOpenDoorRequestsAsync, null, TimeSpan.Zero, interval);
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
-        _timer?.Dispose();
+        //_timer?.Dispose();
         await _processor.StopProcessingAsync(cancellationToken);
         await base.StopAsync(cancellationToken);
     }
@@ -97,7 +97,9 @@ public class Worker : BackgroundService
                     // Control if the message is a new openRequest
                     if (message.TypeOfMessage == "newOpenDoorRequest")
                     {
-                        // I change the random generated code created from cloud
+                        // Delete the older codes (more than three minutes)
+                        await DeleteCodes(3);
+
                         // Random code generation
                         Random random = new Random();
                         string randomGeneratedCode = "";
@@ -192,14 +194,6 @@ public class Worker : BackgroundService
             Console.WriteLine($"An error occurred: {ex.Message}");
         }
     }
-
-    private async void DeleteExpiredOpenDoorRequestsAsync(object state)
-    {
-        await DeleteCodes(3);
-    }
-
-
-
 
 
     static async Task<Uri> InsertOpenDoorRequestAsync(OpenDoorRequest openDoorRequest)
