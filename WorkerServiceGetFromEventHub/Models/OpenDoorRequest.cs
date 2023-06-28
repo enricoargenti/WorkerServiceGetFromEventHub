@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace WorkerServiceGetFromEventHub.Models;
 
-internal class OpenDoorRequest
+public class OpenDoorRequest
 {
     public int? Id { get; set; }
     public int DoorId { get; set; }
