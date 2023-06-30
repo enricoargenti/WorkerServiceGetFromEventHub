@@ -14,7 +14,7 @@ public class OpenDoorRequest
     public string? DeviceGeneratedCode { get; set; }
     public string? CloudGeneratedCode { get; set; }
     public string? CodeInsertedOnDoorByUser { get; set; }
-    public DateTime AccessRequestTime { get; set; }
+    public DateTime? AccessRequestTime { get; set; }
     public string? UserId { get; set; }
     public string? TypeOfMessage { get; set; }
 
