@@ -87,5 +87,22 @@ public class ApiProxyService
         }
     }
 
+    public async Task DeleteOpenDoorRequestAsync(int id)
+    {
+        try
+        {
+            string path = $"api/DoorOpenRequest/{id}";
+
+            HttpResponseMessage response = await _client.DeleteAsync(path);
+
+            response.EnsureSuccessStatusCode();
+
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error on DeleteOpenDoorRequestAsync");
+        }
+    }
+
 
 }
