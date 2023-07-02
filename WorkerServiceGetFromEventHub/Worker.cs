@@ -129,6 +129,12 @@ public class Worker : BackgroundService
                             c2DMessage.Action = 1;
 
                             // ADD THE LOG WITH A POST
+                            Access access = new Access();
+                            access.UserId = openDoorRequest.UserId;
+                            access.DoorId = openDoorRequest.DoorId;
+                            access.DeviceId = openDoorRequest.DeviceId;
+                            access.AccessRequestTime = openDoorRequest.AccessRequestTime;
+                            await _apiProxyService.InsertAccessAsync(access);
                         }
                         else
                         {

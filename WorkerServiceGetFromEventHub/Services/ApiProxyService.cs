@@ -70,5 +70,22 @@ public class ApiProxyService
         }
     }
 
+    public async Task InsertAccessAsync(Access access)
+    {
+        try
+        {
+            string path = $"api/DoorOpenRequest/newaccess";
+
+            HttpResponseMessage response = await _client.PostAsJsonAsync(path, access);
+
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error on InsertAccessAsync");
+            throw;
+        }
+    }
+
 
 }
